@@ -1,0 +1,34 @@
+{
+  "name": "wsdottraffic",
+  "version": "1.0.0",
+  "description": "Collects and aggregates travel time information for the Seattle area of Washington State using the WSDOT APIs",
+  "main": "server.js",
+  "dependencies": {
+    "azure-storage": "^0.4.0",
+    "loggly": "^1.0.7",
+    "node-rest-client": "^1.4.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nattress/wsdottraffic"
+  },
+  "keywords": [
+    "traffic",
+    "wsdot",
+    "seattle",
+    "puget",
+    "everett",
+    "redmond"
+  ],
+  "author": "Simon Nattress",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nattress/wsdottraffic/issues"
+  },
+  "homepage": "https://github.com/nattress/wsdottraffic"
+}
