@@ -6,7 +6,8 @@
   "dependencies": {
     "azure-storage": "^0.4.0",
     "loggly": "^1.0.7",
-    "node-rest-client": "^1.4.1"
+    "node-rest-client": "^1.4.1",
+    "plotly": "^0.2.13"
   },
   "devDependencies": {},
   "scripts": {

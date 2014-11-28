@@ -5,9 +5,6 @@
 // See each section for more information on how to get the correct
 // values.
 //
-
-
-
 exports = module.exports;
 
 var Constants = {
@@ -37,10 +34,16 @@ var Constants = {
     WSDOT_ACCESS_CODE: "ENTER_YOUR_ACCESS_CODE",
     
     //
+    // Plotly
+    //
+    PLOTLY_USERNAME: "ENTER_YOUR_PLOTLY_USERNAME",
+
+    PLOTLY_API_KEY: "ENTER_YOUR_PLOTLY_API_KEY",
+
+    //
     // OPTIONAL values. You *may* provide a Loggly account. If you don't, we'll just
     // use the command line
     //
-
 
     //
     // Loggly
@@ -66,6 +69,15 @@ var Constants = {
     // Interval in milliseconds to call the API. Wsdot states that the API refreshes every 90 seconds
     //
     PERIODIC_TIMER_INTERVAL: 60000,
+
+    // Interval in milliseconds to generate graphs and submit them to Plotly. This needs to be a longer
+    // timer currently as we do a full table scan each time.
+    PLOTLY_TIMER_INTERVAL: 3600000,
+
+    PLOTLY_TRAVEL_TIME_IDS: [   
+                                1,      // Everett to Downtown Seattle
+                                79,     // Redmond-Seattle (WB PM)
+                            ],
 };
 
 module.exports = Constants;
