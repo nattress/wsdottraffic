@@ -251,8 +251,21 @@ function generatePlotlyGraph(travelTimeID, doneCallback)
             else
             {
                 loggly.log("Successfully wrote new graph to plotly for travelTimeID: " + travelTimeID + " (" + msg.url + ")");
-
-                plotly.getFigure(config.PLOTLY_USERNAME, 2, function(err, figure)
+                //
+                // Hack: We need the graph ID to feed to getFigure but the only place I can find it in
+                // the results is by parsing off the end of msg.url, assuming the id is always going
+                // to be last in the URL after a foward slash. This is brittle and hopefully I can dig 
+                // up a better way of finding it in the API.
+                //
+                var re = /\/[0-9]+$/i;
+                var found = msg.url.match(re);
+                if (!found)
+                {
+                    loggly.log("Error parsing graph identifier from URL " + msg.url);
+                    return;
+                }
+                
+                plotly.getFigure(config.PLOTLY_USERNAME, found[0].substr(1), function(err, figure)
                 {
                     if (err)
                     {
