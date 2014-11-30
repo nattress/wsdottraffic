@@ -157,7 +157,19 @@ function collectData()
 
     var req = restClient.get(config.WSDOT_GET_TRAVEL_TIMES_API + config.WSDOT_ACCESS_CODE, function(data, response)
         {
-            var json = JSON.parse(data);
+            try
+            {
+                var json = JSON.parse(data);
+            }
+            catch (err)
+            {
+                loggly.log("Exception parsing WSDOT API response:");
+                loggly.log(err);
+                loggly.log("Data:")
+                loggly.log(data);
+                waitForData();
+                return;
+            }
             
             for (var i = 0; i < json.length; i++)
             {
