@@ -2,7 +2,18 @@ var express = require('express');
 var router = express.Router();
 var azure = require('azure-storage');
 var TableQuery = azure.TableQuery;
-var config = require('../config');
+var optional = require('optional');
+var config = optional('../config');
+
+// When running on Azure, we pick up the connection strings from environment strings configured
+// in the management portal.
+if (!config)
+{
+    config = {
+        AZURE_ACCOUNT_NAME: process.env.AZURE_ACCOUNT_NAME,
+        AZURE_ACCESS_KEY: process.env.AZURE_ACCESS_KEY
+    }
+}
 
 var storageClient = azure.createTableService(config.AZURE_ACCOUNT_NAME, config.AZURE_ACCESS_KEY);
 var travelTimeIDToPlotlyUrlTable = "travelTimeIDToPlotlyUrlTable";

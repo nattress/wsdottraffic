@@ -54,8 +54,8 @@ app.use(function(err, req, res, next) {
     });
 });
 
-
-var server = app.listen(8124, function () {
+var port = process.env.port || 1337;
+var server = app.listen(port, function () {
 
   var host = server.address().address
   var port = server.address().port
