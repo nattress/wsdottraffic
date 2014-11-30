@@ -4,6 +4,7 @@ var config = require('./config');
 var plotly = require('plotly')(config.PLOTLY_USERNAME, config.PLOTLY_API_KEY);
 var RestClient = require('node-rest-client').Client;
 var restClient = new RestClient();
+var plotlyLayout = require('./plotlylayout');
 
 // Azure storage now expects OData and provides a handy entity generator
 var entGen = azure.TableUtilities.entityGenerator;
@@ -28,11 +29,14 @@ else
 //
 //var storageClient = azure.createTableService();
 var storageClient = azure.createTableService(config.AZURE_ACCOUNT_NAME, config.AZURE_ACCESS_KEY);
+var blobClient = azure.createBlobService(config.AZURE_ACCOUNT_NAME, config.AZURE_ACCESS_KEY);
 
 loggly.log("Wsdot Travel Time Monitor");
 
 var trafficTable = "traffictable";
 var travelTimeIDToPlotlyUrlTable = "travelTimeIDToPlotlyUrlTable";
+var graphPreviewContainer = "graphpreviewcontainer";
+var travelTimeIDToNameMap = {};
 
 // Kick off table creation on Azure
 function setupServer()
@@ -44,9 +48,9 @@ function setupServer()
                 throw err;
 
             if (created)
-                loggly.log("Table created since it was not found.");
+                loggly.log(trafficTable + " table created since it was not found.");
             else
-                loggly.log("Table already exists.");
+                loggly.log(trafficTable + " table already exists.");
 
             storageClient.createTableIfNotExists(travelTimeIDToPlotlyUrlTable, 
                 function tableCreated(err, created, response)
@@ -55,11 +59,19 @@ function setupServer()
                         throw err;
 
                     if (created)
-                        loggly.log("Table created since it was not found.");
+                        loggly.log(travelTimeIDToPlotlyUrlTable + " table created since it was not found.");
                     else
-                        loggly.log("Table already exists.");
+                        loggly.log(travelTimeIDToPlotlyUrlTable + " table already exists.");
 
-                    setupComplete();
+                    blobClient.createContainerIfNotExists(graphPreviewContainer, {publicAccessLevel : 'blob'},
+                        function(error, result, response)
+                        {
+                            if (error)
+                                throw error;
+
+                            setupComplete();
+                        }
+                    );
                 }
             );
         }
@@ -70,13 +82,24 @@ function setupComplete()
 {
     loggly.log("Server ready. Starting periodic data collection");
     collectData();
-    generatePlotlyGraphs();
 }
 
 function waitForData()
 {
     loggly.log("Waiting " + config.PERIODIC_TIMER_INTERVAL + "ms until another data collection");
     setTimeout(collectData, config.PERIODIC_TIMER_INTERVAL);
+}
+
+// Call after the first set of data from the WSDOT API is received, which populates our travelTimeID => name map
+// and is used in graph titles
+var graphGenerationStarted = false;
+function beginGraphGeneration()
+{
+    if (!graphGenerationStarted)
+    {
+        graphGenerationStarted = true;
+        generatePlotlyGraphs();
+    }
 }
 
 function waitForGraphGeneration()
@@ -105,14 +128,26 @@ function formatDateForLexicographicSearch(date)
 // A quick workaround for a callback function in a loop not capturing the values of
 // variables as they were for a particular iteration of the loop. They get passed
 // in to this function so their values are preserved on the stack.
-function insertEntity(tableName, entity)
+function insertEntity(tableName, entity, replace)
 {
-    storageClient.insertEntity(tableName, entity, function(error, result, response) {
-        if (error && error.code != "EntityAlreadyExists")
-        {
-            loggly.log(error);
-        }
-    });
+    if (replace != undefined && replace)
+    {
+        storageClient.insertOrReplaceEntity(tableName, entity, function(error, result, response) {
+            if (error && error.code != "EntityAlreadyExists")
+            {
+                loggly.log(error);
+            }
+        });
+    }
+    else
+    {
+        storageClient.insertEntity(tableName, entity, function(error, result, response) {
+            if (error && error.code != "EntityAlreadyExists")
+            {
+                loggly.log(error);
+            }
+        });
+    }
 }
 
 function collectData()
@@ -137,9 +172,12 @@ function collectData()
                     CurrentTime: entGen.String(json[i].CurrentTime),
                     Name: entGen.String(json[i].Name)
                 };
+
+                travelTimeIDToNameMap[json[i].TravelTimeID] = json[i].Name;
                 insertEntity(trafficTable, dataPoint);
             }
 
+            beginGraphGeneration();
             waitForData();
         });
     
@@ -171,15 +209,24 @@ function collectData()
 //
 function generatePlotlyGraphs()
 {
-    config.PLOTLY_TRAVEL_TIME_IDS.forEach(function(id)
-    {
-        generatePlotlyGraph(id);
-    });
-
+    generateNextPlotlyGraph(config.PLOTLY_TRAVEL_TIME_IDS.slice(0));
     waitForGraphGeneration();
 }
 
-function generatePlotlyGraph(travelTimeID)
+function generateNextPlotlyGraph(travelTimeIDs)
+{
+    var travelTimeID = travelTimeIDs.splice(0, 1)[0];
+
+    generatePlotlyGraph(travelTimeID, function()
+    {
+        if (travelTimeIDs.length > 0)
+        {
+            generateNextPlotlyGraph(travelTimeIDs);
+        }
+    });
+}
+
+function generatePlotlyGraph(travelTimeID, doneCallback)
 {
     loggly.log("Generating plotly graph for route " + travelTimeID);
 
@@ -187,28 +234,74 @@ function generatePlotlyGraph(travelTimeID)
         .where('PartitionKey eq ?', travelTimeID.toString());
 
     getAllDataForTravelTimeID(travelTimeID, query, null, [{x: [], y: [], type: "scatter" }], function(travelTimeID, data)
-        {
-            var graph_options = {filename: "traveltimes-" + travelTimeID, fileopt: "overwrite"}
-            
-            plotly.plot(data, graph_options, function (err, msg) {
-                if (err)
+    {
+        var layoutInfo = plotlyLayout.getPlotlyLayout(travelTimeIDToNameMap[travelTimeID]);
+        var graph_options = {
+            filename: "traveltimes-" + travelTimeID, 
+            fileopt: "overwrite",
+            layout: layoutInfo
+        };
+        
+        plotly.plot(data, graph_options, function (err, msg) {
+            if (err)
+            {
+                loggly.log("Error submitting data to plotly: " + err);
+                loggly.log("Error submitting data to plotly: " + msg);
+            }
+            else
+            {
+                loggly.log("Successfully wrote new graph to plotly for travelTimeID: " + travelTimeID + " (" + msg.url + ")");
+
+                plotly.getFigure(config.PLOTLY_USERNAME, 2, function(err, figure)
                 {
-                    loggly.log("Error submitting data to plotly: " + err);
-                    loggly.log("Error submitting data to plotly: " + msg);
-                }
-                else
-                {
-                    loggly.log("Successfully wrote new graph to plotly for travelTimeID: " + travelTimeID + " (" + msg.url + ")");
-                    //msg.url
-                    var idToUrlEntity = {
-                        PartitionKey: entGen.String("none"),
-                        RowKey: entGen.String(travelTimeID.toString()),
-                        url: entGen.String(msg.url)
-                    };
-                    insertEntity(travelTimeIDToPlotlyUrlTable, idToUrlEntity);
-                }
-            });
+                    if (err)
+                    {
+                        loggly.log("Error getting graph from plotly: " + err);
+                    }
+                    else
+                    {
+                        var payload = {
+                            'figure': figure,
+                            'format': 'png'
+                        }
+
+                        plotly.saveImage(payload, "graph", function(err)
+                        {
+                            if (err)
+                            {
+                                loggly.log("Error saving graph to disk: " + err);
+                            }
+                            else
+                            {
+                                loggly.log("Graph saved");
+                                blobClient.createBlockBlobFromLocalFile (graphPreviewContainer, travelTimeID.toString(), "graph.png", function(error, result, response)
+                                {
+                                    if (error)
+                                    {
+                                        loggly.log("Error creating blob from file");
+                                        loggly.log(error);
+                                    }
+                                    else
+                                    {
+                                        var idToUrlEntity = {
+                                            PartitionKey: entGen.String("none"),
+                                            RowKey: entGen.String(travelTimeID.toString()),
+                                            url: entGen.String(msg.url),
+                                            previewImage: entGen.String(config.AZURE_BLOB_STORAGE + "/graphpreviewcontainer/" + travelTimeID),
+                                            name: entGen.String(travelTimeIDToNameMap[travelTimeID])
+                                        };
+                                        insertEntity(travelTimeIDToPlotlyUrlTable, idToUrlEntity, true);
+
+                                        doneCallback();
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+            }
         });
+    });
 }
 
 function getAllDataForTravelTimeID(travelTimeID, query, continuationToken, data, callback)
