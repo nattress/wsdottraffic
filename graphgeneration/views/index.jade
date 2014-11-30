@@ -2,8 +2,4 @@ extends layout
 
 block content
   h1= title
-  
-  for graph in graphs
-    p #{graph.name}
-    a(href=graph.url)
-        img(align:"left",src=graph.previewImage,border=0)
+  p Welcome to #{title}
