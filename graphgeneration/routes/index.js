@@ -2,8 +2,10 @@ var express = require('express');
 var router = express.Router();
 var azure = require('azure-storage');
 var TableQuery = azure.TableQuery;
-var optional = require('optional');
-var config = optional('../config');
+try
+{
+    var config = require('../config');
+} catch (e) {}
 
 // When running on Azure, we pick up the connection strings from environment strings configured
 // in the management portal.
@@ -28,12 +30,15 @@ function getGraphList(callback)
             var graphs = [];
             for (var i = 0; i < entities.length; ++i)
             {
-                var graph = {
-                    "name": entities[i].name._,
-                    "url": entities[i].url._,
-                    "previewImage": entities[i].previewImage._,
-                };
-                graphs.push(graph);
+                if (undefined != entities[i].name)
+                {
+                    var graph = {
+                        "name": entities[i].name._,
+                        "url": entities[i].url._,
+                        "previewImage": entities[i].previewImage._,
+                    };
+                    graphs.push(graph);
+                }
             }
             callback(null, graphs);
         }
